@@ -1,0 +1,72 @@
+ // Creates a task queue.
+  // The CmQueue is an in-order queue. Tasks get executed according to the
+  // order they are enqueued. The next task does not start execution until the
+  // current task finishes.
+  CmQueue *cmd_queue = nullptr;
+  cm_result_check(device->CreateQueue(cmd_queue));
+
+  // Creates a CmTask object.
+  // The CmTask object is a container for CmKernel pointers. It is used to
+  // enqueue the kernels for execution.
+  CmTask *task = nullptr;
+  cm_result_check(device->CreateTask(task));
+
+  // Adds a CmKernel pointer to CmTask.
+  // This task has one kernel, "linear".
+  cm_result_check(task->AddKernel(kernel));
+
+  // Launches the task on the GPU. Enqueue is a non-blocking call, i.e. the
+  // function returns immediately without waiting for the GPU to start or
+  // finish execution of the task. The runtime will query the HW status. If
+  // the hardware is not busy, the runtime will submit the task to the
+  // driver/HW; otherwise, the runtime will submit the task to the driver/HW
+  // at another time.
+  // An event, "sync_event", is created to track the status of the task.
+  CmEvent *sync_event = nullptr;
+  cm_result_check(cmd_queue->Enqueue(task,
+                                     sync_event,
+                                     thread_space));
+STEP 8. GETTING RESULTS AND EXECUTION TIME
+Notice that CM event is used when we read the output surface, and it is used to query execution time. CmEvent must be destroyed by user explicitly.
+
+  // Destroys a CmTask object.
+  // CmTask will be destroyed when CmDevice is destroyed.
+  // Here, the application destroys the CmTask object by itself.
+  cm_result_check(device->DestroyTask(task));
+
+  // Destroy a CmThreadSpace object.
+  // CmThreadSpace will be destroyed when CmDevice is destroyed.
+  // Here, the application destroys the CmThreadSpace object by itself.
+  cm_result_check(device->DestroyThreadSpace(thread_space));
+
+  // Reads the output surface content to the system memory using the CPU.
+  // The size of data copied is the size of data in Surface.
+  // It is a blocking call. The function will not return until the copy
+  // operation is completed.
+  // The dependent event "sync_event" ensures that the reading of the surface
+  // will not happen until its state becomes CM_STATUS_FINISHED.
+  cm_result_check(output_surface->ReadSurface(output_image.getData(),
+                                              sync_event));
+
+  // Queries the execution time of a task in the unit of nanoseconds.
+  // The execution time is measured from the time the task started execution
+  // in the GPU to the time when the task finished execution.
+  UINT64 execution_time = 0;
+  cm_result_check(sync_event->GetExecutionTime(execution_time));
+  std::cout << "Kernel linear execution time is " << execution_time
+      << " nanoseconds" << std::endl;
+
+
+  // Destroys the CmEvent.
+  // CmEvent must be destroyed by the user explicitly.
+  cm_result_check(cmd_queue->DestroyEvent(sync_event));
+
+  // Destroys the CmDevice.
+  // Also destroys surfaces, kernels, tasks, thread spaces, and queues that
+  // were created using this device instance that have not explicitly been
+  // destroyed by calling the respective destroy functions.
+  cm_result_check(::DestroyCmDevice(device));
+
+  // Saves the output image data into the file "linear_out.bmp".
+  output_image.save("linear_out.bmp");
+ 
